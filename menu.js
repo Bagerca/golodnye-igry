@@ -3,69 +3,105 @@
 // Глобальные переменные
 let menuData = [];
 
-// Проверка/создание глобального массива заказа (для взаимодействия со script.js)
-if (typeof selectedFoods === 'undefined') {
-    var selectedFoods = []; 
+// Проверка/создание глобального массива заказа
+// Используем var или window, чтобы переменная была доступна везде
+if (typeof window.selectedFoods === 'undefined') {
+    window.selectedFoods = []; 
 }
 
-// Элементы DOM (Модальное окно и меню)
 const menuModal = document.getElementById('menu-modal');
 const menuContainer = document.getElementById('menu-container');
 const categoriesContainer = document.getElementById('categories-container');
 const cartDisplayMain = document.getElementById('selected-food-display');
 const modalTotalPrice = document.getElementById('modal-total-price');
 
-// Элементы для прокрутки категорий
 const scrollLeftBtn = document.getElementById('scroll-left');
 const scrollRightBtn = document.getElementById('scroll-right');
-
-// Элементы для просмотра фото
 const imageViewer = document.getElementById('image-viewer');
 const viewerImg = document.getElementById('viewer-img');
 
 // --- 1. ЗАГРУЗКА И ИНИЦИАЛИЗАЦИЯ ---
 
 async function initMenu() {
+    // Если уже загружено, не грузим снова
+    if (menuData.length > 0) return;
+
     try {
         const response = await fetch('menu.json');
         if (!response.ok) throw new Error('Ошибка сети');
         menuData = await response.json();
         
         renderCategories();
-        
-        // Открываем первую категорию, если она есть
-        if (menuData.length > 0) {
-            renderItems(menuData[0].items); 
-            updateCategoryActiveState(0);
-        }
-        
-        // Инициализируем проверку стрелок после рендера
+        // Не рендерим товары сразу, чтобы не сбивать вид, если меню закрыто
+        // Но подгружаем первую категорию для готовности
         setTimeout(checkScrollArrows, 100);
 
     } catch (error) {
         console.error("Ошибка:", error);
-        menuContainer.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:20px; color:#a4b0be;">❄️ Меню замело снегом... (Ошибка загрузки menu.json)</div>';
     }
 }
+
+// --- НОВАЯ ФУНКЦИЯ: ВОССТАНОВЛЕНИЕ КОРЗИНЫ ---
+window.restoreCartFromFirebase = async function(savedItems) {
+    // 1. Убеждаемся, что меню загружено (чтобы найти картинки по названиям)
+    if (menuData.length === 0) {
+        await initMenu();
+    }
+
+    // 2. Очищаем текущую корзину
+    window.selectedFoods = [];
+
+    // 3. Сопоставляем сохраненные названия с полными данными из меню
+    savedItems.forEach(savedItem => {
+        // Ищем товар во всех категориях
+        let foundProduct = null;
+        
+        for (const category of menuData) {
+            const match = category.items.find(i => i.title === savedItem.title);
+            if (match) {
+                foundProduct = match;
+                break;
+            }
+        }
+
+        // Если нашли — добавляем в корзину. 
+        // Если блюдо удалили из меню, но оно было в заказе — игнорируем или создаем заглушку.
+        if (foundProduct) {
+            window.selectedFoods.push(foundProduct);
+        }
+    });
+
+    // 4. Обновляем интерфейс
+    updateMainCartUI();
+    console.log("Корзина восстановлена:", window.selectedFoods.length, "позиций");
+};
+// ---------------------------------------------
 
 // --- 2. УПРАВЛЕНИЕ МОДАЛЬНЫМ ОКНОМ ---
 
 function openMenu() {
-    // Если меню еще не загружено, грузим
     if (menuData.length === 0) {
-        initMenu();
+        initMenu().then(() => {
+             // После загрузки рендерим первую категорию
+             if (menuData.length > 0) {
+                 renderItems(menuData[0].items);
+                 updateCategoryActiveState(0);
+             }
+        });
     } else {
-        // Если уже загружено, обновляем текущий вид
-        const activeBtn = document.querySelector('.cat-btn.active');
-        if (activeBtn) activeBtn.click();
-        else if (menuData.length > 0) renderItems(menuData[0].items);
+        // Если уже открывали, обновляем счетчики
+        const activeBtnIndex = Array.from(document.querySelectorAll('.cat-btn')).findIndex(b => b.classList.contains('active'));
+        if (activeBtnIndex >= 0) {
+             renderItems(menuData[activeBtnIndex].items);
+        } else if (menuData.length > 0) {
+             renderItems(menuData[0].items);
+        }
     }
     
     menuModal.classList.remove('hidden');
-    // Небольшая задержка для запуска CSS transition
     setTimeout(() => {
         menuModal.classList.add('active');
-        checkScrollArrows(); // Проверяем стрелки при открытии
+        checkScrollArrows();
     }, 10);
     
     updateModalTotal();
@@ -74,8 +110,6 @@ function openMenu() {
 function closeMenu() {
     menuModal.classList.remove('active');
     setTimeout(() => menuModal.classList.add('hidden'), 300);
-    
-    // При закрытии обязательно обновляем корзину на главном экране
     updateMainCartUI(); 
 }
 
@@ -83,41 +117,26 @@ function closeMenu() {
 
 function scrollCategories(direction) {
     if (categoriesContainer) {
-        const scrollAmount = 200; // Шаг прокрутки
-        categoriesContainer.scrollBy({
-            left: direction * scrollAmount,
-            behavior: 'smooth'
-        });
+        categoriesContainer.scrollBy({ left: direction * 200, behavior: 'smooth' });
     }
 }
 
 function checkScrollArrows() {
     if (!categoriesContainer || !scrollLeftBtn || !scrollRightBtn) return;
-
-    // Скрываем левую стрелку, если мы в начале
-    if (categoriesContainer.scrollLeft <= 10) {
-        scrollLeftBtn.classList.add('hidden');
-    } else {
-        scrollLeftBtn.classList.remove('hidden');
-    }
-
-    // Скрываем правую стрелку, если дошли до конца
-    const maxScroll = categoriesContainer.scrollWidth - categoriesContainer.clientWidth;
+    if (categoriesContainer.scrollLeft <= 10) scrollLeftBtn.classList.add('hidden');
+    else scrollLeftBtn.classList.remove('hidden');
     
-    if (categoriesContainer.scrollLeft >= maxScroll - 10) {
-        scrollRightBtn.classList.add('hidden');
-    } else {
-        scrollRightBtn.classList.remove('hidden');
-    }
+    const maxScroll = categoriesContainer.scrollWidth - categoriesContainer.clientWidth;
+    if (categoriesContainer.scrollLeft >= maxScroll - 10) scrollRightBtn.classList.add('hidden');
+    else scrollRightBtn.classList.remove('hidden');
 }
 
-// Слушатели для прокрутки
 if (categoriesContainer) {
     categoriesContainer.addEventListener('scroll', checkScrollArrows);
     window.addEventListener('resize', checkScrollArrows);
 }
 
-// --- 4. РЕНДЕРИНГ (ОТРИСОВКА) ---
+// --- 4. РЕНДЕРИНГ ---
 
 function renderCategories() {
     categoriesContainer.innerHTML = '';
@@ -125,16 +144,13 @@ function renderCategories() {
         const btn = document.createElement('button');
         btn.textContent = cat.category;
         btn.className = 'cat-btn';
-        if (index === 0) btn.classList.add('active'); // Первая активна по умолчанию
-        
+        if (index === 0) btn.classList.add('active');
         btn.onclick = () => {
             renderItems(cat.items);
             updateCategoryActiveState(index);
         };
         categoriesContainer.appendChild(btn);
     });
-    // После добавления кнопок нужно проверить стрелки
-    setTimeout(checkScrollArrows, 50);
 }
 
 function updateCategoryActiveState(index) {
@@ -146,68 +162,30 @@ function updateCategoryActiveState(index) {
 
 function renderItems(items) {
     menuContainer.innerHTML = '';
-    
-    // Анимация появления списка
     menuContainer.style.opacity = '0';
     setTimeout(() => menuContainer.style.opacity = '1', 50);
 
     if (!items || items.length === 0) {
-        menuContainer.innerHTML = '<div style="grid-column: 1/-1; text-align:center; color:#a4b0be; padding: 40px;">В этой категории пока пусто...</div>';
+        menuContainer.innerHTML = '<div style="color:#a4b0be; padding: 40px;">В этой категории пока пусто...</div>';
         return;
     }
 
     items.forEach(item => {
-        // Считаем, сколько таких блюд уже в корзине
-        const count = selectedFoods.filter(f => f.id === item.id).length;
-
+        const count = window.selectedFoods.filter(f => f.id === item.id).length;
         const card = document.createElement('div');
         card.className = 'menu-item fade-in';
-        card.dataset.id = item.id;
-        
-        // --- ИСПРАВЛЕНИЕ: Формируем HTML для КБЖУ только если данные есть ---
-        let nutritionHtml = '';
-        if (item.nutrition) {
-            nutritionHtml = `
-                <div class="nutrition-row">
-                    <div class="nut-item"><span>Ккал</span><span class="nut-val">${item.nutrition.kcal}</span></div>
-                    <div class="nut-item"><span>Белки</span><span class="nut-val">${item.nutrition.prot}</span></div>
-                    <div class="nut-item"><span>Жиры</span><span class="nut-val">${item.nutrition.fats}</span></div>
-                    <div class="nut-item"><span>Угл.</span><span class="nut-val">${item.nutrition.carb}</span></div>
-                </div>
-            `;
-        } else {
-            // Если КБЖУ нет, можно оставить пусто или добавить отступ
-            nutritionHtml = `<div style="margin-bottom: 15px;"></div>`; 
-        }
-
-        // Вес блюда (если есть)
-        const weightHtml = item.weight ? `<div class="weight-badge">${item.weight}</div>` : '';
-
         card.innerHTML = `
             <div class="img-container">
                 <img src="${item.img}" alt="${item.title}" loading="lazy">
-                
-                <button class="expand-btn" onclick="openImageViewer('${item.img}')" title="Увеличить фото">
-                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="15 3 21 3 21 9"></polyline>
-                        <polyline points="9 21 3 21 3 15"></polyline>
-                        <line x1="21" y1="3" x2="14" y2="10"></line>
-                        <line x1="3" y1="21" x2="10" y2="14"></line>
-                    </svg>
-                </button>
-                
-                ${weightHtml}
+                <button class="expand-btn" onclick="openImageViewer('${item.img}')">🔍</button>
+                ${item.weight ? `<div class="weight-badge">${item.weight}</div>` : ''}
             </div>
-            
             <div class="item-content">
                 <div class="item-header">
                     <div class="item-title">${item.title}</div>
                     <div class="item-price">${item.price} ₽</div>
                 </div>
                 <div class="item-desc">${item.desc}</div>
-                
-                ${nutritionHtml}
-
                 <div class="item-actions" id="actions-${item.id}">
                     ${getButtonHtml(item.id, count)}
                 </div>
@@ -217,7 +195,7 @@ function renderItems(items) {
     });
 }
 
-// --- 5. ЛОГИКА КОРЗИНЫ (ДОБАВЛЕНИЕ/УДАЛЕНИЕ) ---
+// --- 5. ЛОГИКА КОРЗИНЫ ---
 
 function getButtonHtml(id, count) {
     if (count > 0) {
@@ -241,19 +219,20 @@ function findProduct(id) {
     return null;
 }
 
-function increaseItem(id) {
+// Делаем функции глобальными для onclick в HTML
+window.increaseItem = function(id) {
     const product = findProduct(id);
     if (product) {
-        selectedFoods.push(product); 
+        window.selectedFoods.push(product); 
         updateCardUI(id);            
         updateModalTotal();          
     }
 }
 
-function decreaseItem(id) {
-    const index = selectedFoods.findIndex(f => f.id === id);
+window.decreaseItem = function(id) {
+    const index = window.selectedFoods.findIndex(f => f.id === id);
     if (index !== -1) {
-        selectedFoods.splice(index, 1);
+        window.selectedFoods.splice(index, 1);
         updateCardUI(id);
         updateModalTotal();
     }
@@ -262,13 +241,13 @@ function decreaseItem(id) {
 function updateCardUI(id) {
     const actionContainer = document.getElementById(`actions-${id}`);
     if (actionContainer) {
-        const count = selectedFoods.filter(f => f.id === id).length;
+        const count = window.selectedFoods.filter(f => f.id === id).length;
         actionContainer.innerHTML = getButtonHtml(id, count);
     }
 }
 
 function updateModalTotal() {
-    const total = selectedFoods.reduce((sum, item) => sum + item.price, 0);
+    const total = window.selectedFoods.reduce((sum, item) => sum + item.price, 0);
     if(modalTotalPrice) modalTotalPrice.textContent = total;
 }
 
@@ -278,7 +257,7 @@ function updateMainCartUI() {
     if (!cartDisplayMain) return;
     cartDisplayMain.innerHTML = '';
     
-    if (selectedFoods.length === 0) {
+    if (window.selectedFoods.length === 0) {
         cartDisplayMain.innerHTML = `
             <div class="empty-cart-placeholder" onclick="openMenu()">
                 <span style="font-size: 2rem; margin-bottom:10px;">🍽</span>
@@ -291,7 +270,7 @@ function updateMainCartUI() {
     const grouped = {};
     let total = 0;
     
-    selectedFoods.forEach(item => {
+    window.selectedFoods.forEach(item => {
         total += item.price;
         if (!grouped[item.id]) {
             grouped[item.id] = { ...item, count: 0 };
@@ -329,18 +308,18 @@ function updateMainCartUI() {
     cartDisplayMain.appendChild(totalRow);
 }
 
-function removeOneInstance(id) {
-    const index = selectedFoods.findIndex(f => f.id === id);
+window.removeOneInstance = function(id) {
+    const index = window.selectedFoods.findIndex(f => f.id === id);
     if (index !== -1) {
-        selectedFoods.splice(index, 1);
+        window.selectedFoods.splice(index, 1);
         updateMainCartUI();
     }
 }
 
-// --- 7. ФУНКЦИИ ПРОСМОТРА ФОТО ---
+// --- 7. ПРОСМОТР ФОТО ---
 
-function openImageViewer(src) {
-    event.stopPropagation();
+window.openImageViewer = function(src) {
+    if (window.event) window.event.stopPropagation();
     if (imageViewer && viewerImg) {
         viewerImg.src = src;
         imageViewer.classList.remove('hidden');
@@ -348,7 +327,7 @@ function openImageViewer(src) {
     }
 }
 
-function closeImageViewer() {
+window.closeImageViewer = function() {
     if (imageViewer) {
         imageViewer.style.opacity = '0';
         setTimeout(() => {
@@ -358,11 +337,11 @@ function closeImageViewer() {
     }
 }
 
-// --- 8. ИНИЦИАЛИЗАЦИЯ ---
+// Глобальные вызовы для HTML
+window.openMenu = openMenu;
+window.closeMenu = closeMenu;
+window.scrollCategories = scrollCategories;
+
 document.addEventListener('DOMContentLoaded', () => {
-    updateMainCartUI();
-    const observer = new MutationObserver(checkScrollArrows);
-    if(categoriesContainer) {
-        observer.observe(categoriesContainer, { childList: true, subtree: true });
-    }
+    updateMainCartUI(); // Если корзина пуста при старте
 });

@@ -2,9 +2,9 @@
 
 // 1. ИМПОРТИРУЕМ БАЗУ И ФУНКЦИИ (Версия 12.7.0)
 import { db } from './firebase-init.js';
-import { doc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+// ДОБАВИЛ getDoc для чтения данных
+import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-// Генератор случайных чисел
 function mulberry32(a) {
     return function() {
       var t = a += 0x6D2B79F5;
@@ -81,9 +81,9 @@ const greeting = document.getElementById('user-greeting');
 const chairsTop = document.getElementById('chairs-top');
 const chairsBottom = document.getElementById('chairs-bottom');
 const saveBtn = document.getElementById('save-btn');
-const adminBtn = document.getElementById('admin-btn'); // Кнопка админа
+const adminBtn = document.getElementById('admin-btn'); 
 
-// Экспортируем функции в глобальную область (для onclick в HTML)
+// Экспорт для HTML
 window.login = login;
 window.saveChoice = saveChoice;
 
@@ -111,18 +111,21 @@ function login() {
         currentUserObj = user;
         
         // --- ЛОГИКА АДМИНА ---
-        // Если это Баграт, показываем кнопку админки
         if (user.name === "Бебия Баграт") {
             if(adminBtn) adminBtn.classList.remove('hidden');
         }
-        // ---------------------
 
         loginScreen.style.opacity = '0';
         setTimeout(() => {
             loginScreen.classList.add('hidden');
             mainApp.classList.remove('hidden');
             mainApp.classList.add('fade-in'); 
+            
             fillTableWithGuests();
+            
+            // !! НОВОЕ: Проверяем, был ли заказ в базе, и восстанавливаем его !!
+            checkAndRestoreOrder(user.name);
+
         }, 500);
 
         loadUserPhoto(user, (url) => {
@@ -136,6 +139,36 @@ function login() {
     }
 }
 
+// НОВАЯ ФУНКЦИЯ ДЛЯ ЗАГРУЗКИ ЗАКАЗА ПРИ ВХОДЕ
+async function checkAndRestoreOrder(username) {
+    try {
+        const docRef = doc(db, "orders", username);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.items && data.items.length > 0) {
+                console.log("Найден старый заказ, восстанавливаем...");
+                
+                // Вызываем функцию из menu.js, чтобы восстановить UI
+                if (window.restoreCartFromFirebase) {
+                    await window.restoreCartFromFirebase(data.items);
+                    
+                    // Обновляем кнопку, чтобы было понятно, что заказ загружен
+                    saveBtn.textContent = "Ваш заказ загружен ✅";
+                    saveBtn.style.background = "#2ed573";
+                    setTimeout(() => {
+                        saveBtn.textContent = "🎄 Обновить выбор 🎄";
+                        saveBtn.style.background = "";
+                    }, 4000);
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Ошибка при восстановлении заказа:", error);
+    }
+}
+
 function fillTableWithGuests() {
     usersDB.forEach(guest => {
         const chair = document.querySelector(`.chair[data-id="${guest.seatId}"]`);
@@ -143,8 +176,7 @@ function fillTableWithGuests() {
             loadUserPhoto(guest, (url) => {
                 chair.textContent = '';
                 chair.style.backgroundImage = `url('${url}')`;
-                // ИСПРАВЛЕНИЕ: Прозрачный фон, чтобы убрать белые полоски
-                chair.style.backgroundColor = 'transparent';
+                chair.style.backgroundColor = 'transparent'; 
                 chair.setAttribute('data-tooltip', guest.name);
             });
 
@@ -172,27 +204,24 @@ function loadUserPhoto(user, callback) {
 
 // --- СОХРАНЕНИЕ В FIREBASE ---
 async function saveChoice() {
-    // selectedFoods - глобальная переменная из menu.js
-    if (typeof selectedFoods === 'undefined' || selectedFoods.length === 0) {
+    // window.selectedFoods из menu.js
+    if (typeof window.selectedFoods === 'undefined' || window.selectedFoods.length === 0) {
         alert("🍽 Ты ничего не заказал!");
         openMenu();
         return;
     }
 
     saveBtn.textContent = "Сохраняю... ⏳";
-    saveBtn.disabled = true; // Блокируем кнопку, чтобы не жали дважды
+    saveBtn.disabled = true;
 
     try {
-        const total = selectedFoods.reduce((sum, item) => sum + item.price, 0);
+        const total = window.selectedFoods.reduce((sum, item) => sum + item.price, 0);
         
-        // Подготовка данных: список блюд
-        const orderItems = selectedFoods.map(item => ({
+        const orderItems = window.selectedFoods.map(item => ({
             title: item.title,
             price: item.price
         }));
 
-        // Сохраняем в коллекцию 'orders'
-        // Используем имя пользователя как ID документа (перезаписываем, если уже был)
         await setDoc(doc(db, "orders", currentUserObj.name), {
             userName: currentUserObj.name,
             items: orderItems,
@@ -204,11 +233,10 @@ async function saveChoice() {
         saveBtn.style.background = "#2ed573";
         alert("Твой заказ успешно сохранен! ✅");
         
-        // Возвращаем кнопку через пару секунд
         setTimeout(() => {
              saveBtn.disabled = false;
              saveBtn.textContent = "🎄 Обновить выбор 🎄";
-             saveBtn.style.background = ""; // Сброс цвета (вернется градиент из CSS)
+             saveBtn.style.background = ""; 
         }, 3000);
 
     } catch (error) {
