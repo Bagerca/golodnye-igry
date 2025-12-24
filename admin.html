@@ -22,7 +22,7 @@
             display: block; 
             overflow-y: auto;
             padding: 20px;
-            background-color: #0a0e17; /* Фикс для скриншота */
+            background-color: #0a0e17; /* Важно для корректного фона на скриншоте */
         }
 
         .admin-wrapper { 
@@ -46,6 +46,7 @@
             display: flex;
             gap: 15px;
             margin-bottom: 30px;
+            flex-wrap: wrap;
         }
 
         .action-btn {
@@ -60,6 +61,7 @@
             gap: 8px;
             transition: 0.2s;
             font-size: 0.9rem;
+            color: #fff;
         }
 
         .copy-btn {
@@ -110,10 +112,10 @@
             display: grid; 
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
             gap: 20px; 
-            padding: 10px; /* Отступ для скриншота */
+            padding: 10px; 
         }
         .order-card { 
-            background: rgba(30, 39, 46, 0.85); 
+            background: rgba(30, 39, 46, 0.9); 
             border: 1px solid rgba(255,255,255,0.1); 
             border-radius: 16px; 
             padding: 20px;
@@ -126,7 +128,7 @@
         
         .order-list { 
             margin: 15px 0; 
-            max-height: 250px; 
+            max-height: 300px; 
             overflow-y: auto; 
             padding-right: 5px;
         }
@@ -154,6 +156,9 @@
         }
         .total-price { font-size: 1.4rem; font-weight: 800; color: #2ed573; text-shadow: 0 0 10px rgba(46, 213, 115, 0.3); }
 
+        /* Пустой заказ */
+        .empty-order-msg { color: #7f8fa6; font-style: italic; text-align: center; margin-top: 20px; }
+
         /* Таблица гостей без заказа */
         .missing-guests { 
             margin-top: 50px; 
@@ -164,7 +169,7 @@
         }
         .missing-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
         .missing-tag { 
-            background: rgba(255, 71, 87, 0.2); 
+            background: rgba(255, 71, 87, 0.15); 
             color: #ff6b81; 
             border: 1px solid #ff4757;
             padding: 8px 16px; 
@@ -193,8 +198,12 @@
 
         <!-- КНОПКИ ДЕЙСТВИЙ -->
         <div class="actions-bar">
-            <button onclick="copyOrdersText()" class="action-btn copy-btn">📋 Копировать текстом</button>
-            <button onclick="downloadOrdersImage()" class="action-btn img-btn">📸 Скачать фото заказов</button>
+            <button onclick="copyOrdersText()" class="action-btn copy-btn">
+                <span>📋</span> Копировать текстом
+            </button>
+            <button onclick="downloadOrdersImage()" class="action-btn img-btn">
+                <span>📸</span> Скачать фото заказов
+            </button>
         </div>
 
         <div class="stats-cards">
@@ -224,6 +233,7 @@
     <!-- СКРИПТ АДМИНКИ -->
     <script type="module">
         import { db } from './firebase-init.js';
+        // Импортируем из версии 12.7.0
         import { collection, onSnapshot } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
         // Глобальная переменная для хранения данных (чтобы кнопки имели доступ)
@@ -242,6 +252,7 @@
         const totalMoneyEl = document.getElementById('total-money');
         const ordersCountEl = document.getElementById('orders-count');
 
+        // СЛУШАТЕЛЬ БАЗЫ ДАННЫХ
         onSnapshot(collection(db, "orders"), (snapshot) => {
             ordersContainer.innerHTML = '';
             missingContainer.innerHTML = '';
@@ -258,21 +269,33 @@
                 ordersContainer.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #a4b0be;">Пока нет заказов 🤷‍♂️</div>';
             }
 
+            // Сортировка: новые сверху
             orders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             
-            // Сохраняем данные глобально
+            // Сохраняем данные глобально для кнопок
             window.allOrdersData = orders;
 
             orders.forEach(data => {
                 globalTotal += data.totalPrice;
-                orderedNames.push(data.userName);
-                
+                // Считаем заказавшим, только если сумма > 0, иначе это "отмененный" заказ
+                if (data.items && data.items.length > 0) {
+                    orderedNames.push(data.userName);
+                }
+
+                // Группировка
                 const summary = {};
-                data.items.forEach(i => summary[i.title] = (summary[i.title] || 0) + 1);
+                if (data.items) {
+                    data.items.forEach(i => summary[i.title] = (summary[i.title] || 0) + 1);
+                }
 
                 let itemsHtml = '';
                 for (const [name, count] of Object.entries(summary)) {
                     itemsHtml += `<div class="order-row"><span>${name}</span><span>x${count}</span></div>`;
+                }
+
+                // Если список пуст
+                if (!itemsHtml) {
+                    itemsHtml = '<div class="empty-order-msg">Заказ пуст / Отменён 🗑️</div>';
                 }
 
                 const dateObj = new Date(data.timestamp);
@@ -296,6 +319,7 @@
             totalMoneyEl.textContent = globalTotal.toLocaleString() + ' ₽';
             ordersCountEl.textContent = `${orderedNames.length} / ${allGuests.length}`;
 
+            // Тех, кто удалил заказ (сделал пустой), тоже считаем как "не заказавших", чтобы пнуть их
             const missing = allGuests.filter(g => !orderedNames.includes(g));
             
             if (missing.length === 0) {
@@ -310,7 +334,7 @@
             }
         });
 
-        // --- ФУНКЦИИ КНОПОК ---
+        // --- ФУНКЦИИ КНОПОК (ЭКСПОРТИРУЕМ В WINDOW) ---
 
         // 1. КОПИРОВАНИЕ ТЕКСТА
         window.copyOrdersText = function() {
@@ -321,12 +345,16 @@
 
             let textReport = "🎄 **ЗАКАЗЫ НА НОВЫЙ ГОД 2025** 🎄\n\n";
             let grandTotal = 0;
+            let indexCounter = 1;
 
-            window.allOrdersData.forEach((order, index) => {
+            window.allOrdersData.forEach((order) => {
+                // Пропускаем пустые заказы в текстовом отчете
+                if (!order.items || order.items.length === 0) return;
+
                 grandTotal += order.totalPrice;
-                textReport += `${index + 1}. 👤 ${order.userName} — 💰 ${order.totalPrice} ₽\n`;
+                textReport += `${indexCounter}. 👤 ${order.userName} — 💰 ${order.totalPrice} ₽\n`;
+                indexCounter++;
                 
-                // Группировка
                 const summary = {};
                 order.items.forEach(i => summary[i.title] = (summary[i.title] || 0) + 1);
                 
@@ -352,25 +380,27 @@
         // 2. СКАЧИВАНИЕ ФОТО
         window.downloadOrdersImage = function() {
             const element = document.getElementById('orders-container');
-            if(element.children.length === 0) {
+            if(element.children.length === 0 || element.innerText.includes("Пока нет")) {
                 alert("Нет заказов для фото.");
                 return;
             }
             
             const btn = document.querySelector('.img-btn');
+            const oldText = btn.innerHTML;
             btn.innerHTML = "⏳ Создаю фото...";
 
-            // Используем библиотеку html2canvas
+            // Настройки html2canvas
             html2canvas(element, {
-                backgroundColor: "#0a0e17", // Цвет фона как у body
-                scale: 2 // Высокое качество
+                backgroundColor: "#0a0e17", // Темный фон
+                scale: 2, // Высокое качество
+                useCORS: true // Разрешить грузить стили
             }).then(canvas => {
                 const link = document.createElement('a');
                 link.download = `Orders_NY2025_${new Date().getTime()}.png`;
                 link.href = canvas.toDataURL();
                 link.click();
                 
-                btn.innerHTML = "📸 Скачать фото заказов";
+                btn.innerHTML = oldText;
             });
         };
     </script>

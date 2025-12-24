@@ -2,9 +2,9 @@
 
 // 1. ИМПОРТИРУЕМ БАЗУ И ФУНКЦИИ (Версия 12.7.0)
 import { db } from './firebase-init.js';
-// ДОБАВИЛ getDoc для чтения данных
 import { doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
+// Генератор случайных чисел
 function mulberry32(a) {
     return function() {
       var t = a += 0x6D2B79F5;
@@ -123,7 +123,7 @@ function login() {
             
             fillTableWithGuests();
             
-            // !! НОВОЕ: Проверяем, был ли заказ в базе, и восстанавливаем его !!
+            // Проверяем, был ли заказ в базе, и восстанавливаем его
             checkAndRestoreOrder(user.name);
 
         }, 500);
@@ -139,7 +139,7 @@ function login() {
     }
 }
 
-// НОВАЯ ФУНКЦИЯ ДЛЯ ЗАГРУЗКИ ЗАКАЗА ПРИ ВХОДЕ
+// ФУНКЦИЯ ДЛЯ ЗАГРУЗКИ ЗАКАЗА ПРИ ВХОДЕ
 async function checkAndRestoreOrder(username) {
     try {
         const docRef = doc(db, "orders", username);
@@ -147,16 +147,22 @@ async function checkAndRestoreOrder(username) {
 
         if (docSnap.exists()) {
             const data = docSnap.data();
-            if (data.items && data.items.length > 0) {
+            // Проверяем, есть ли товары (даже если 0, считаем что загрузилось, просто корзина пуста)
+            if (data.items) {
                 console.log("Найден старый заказ, восстанавливаем...");
                 
                 // Вызываем функцию из menu.js, чтобы восстановить UI
                 if (window.restoreCartFromFirebase) {
                     await window.restoreCartFromFirebase(data.items);
                     
-                    // Обновляем кнопку, чтобы было понятно, что заказ загружен
-                    saveBtn.textContent = "Ваш заказ загружен ✅";
-                    saveBtn.style.background = "#2ed573";
+                    if (data.items.length > 0) {
+                        saveBtn.textContent = "Ваш заказ загружен ✅";
+                        saveBtn.style.background = "#2ed573";
+                    } else {
+                        // Если заказ пустой (был очищен)
+                        saveBtn.textContent = "Заказ пуст"; 
+                    }
+
                     setTimeout(() => {
                         saveBtn.textContent = "🎄 Обновить выбор 🎄";
                         saveBtn.style.background = "";
@@ -202,37 +208,42 @@ function loadUserPhoto(user, callback) {
     img.onerror = () => callback(defaultAvatar);
 }
 
-// --- СОХРАНЕНИЕ В FIREBASE ---
+// --- СОХРАНЕНИЕ В FIREBASE (ИСПРАВЛЕННАЯ ВЕРСИЯ) ---
 async function saveChoice() {
-    // window.selectedFoods из menu.js
-    if (typeof window.selectedFoods === 'undefined' || window.selectedFoods.length === 0) {
-        alert("🍽 Ты ничего не заказал!");
-        openMenu();
-        return;
-    }
+    // Получаем текущую корзину (или пустой массив)
+    const currentFood = window.selectedFoods || [];
 
     saveBtn.textContent = "Сохраняю... ⏳";
     saveBtn.disabled = true;
 
     try {
-        const total = window.selectedFoods.reduce((sum, item) => sum + item.price, 0);
+        const total = currentFood.reduce((sum, item) => sum + item.price, 0);
         
-        const orderItems = window.selectedFoods.map(item => ({
+        const orderItems = currentFood.map(item => ({
             title: item.title,
             price: item.price
         }));
 
+        // Сохраняем в Firebase (перезаписываем документ)
         await setDoc(doc(db, "orders", currentUserObj.name), {
             userName: currentUserObj.name,
-            items: orderItems,
+            items: orderItems, // Может быть пустым
             totalPrice: total,
             timestamp: new Date().toISOString()
         });
 
-        saveBtn.textContent = "Готово! 🎉";
-        saveBtn.style.background = "#2ed573";
-        alert("Твой заказ успешно сохранен! ✅");
+        // Уведомления в зависимости от ситуации
+        if (orderItems.length === 0) {
+            saveBtn.textContent = "Очищено 🗑️";
+            saveBtn.style.background = "#a4b0be"; // Серый цвет
+            alert("Ваш заказ удален (список пуст). 🗑️");
+        } else {
+            saveBtn.textContent = "Готово! 🎉";
+            saveBtn.style.background = "#2ed573"; // Зеленый цвет
+            alert("Твой заказ успешно сохранен! ✅");
+        }
         
+        // Возвращаем кнопку в исходное состояние
         setTimeout(() => {
              saveBtn.disabled = false;
              saveBtn.textContent = "🎄 Обновить выбор 🎄";
