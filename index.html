@@ -32,6 +32,12 @@
 
     <!-- 2. ГЛАВНЫЙ ИНТЕРФЕЙС -->
     <div id="main-app" class="glass-card wide-card hidden">
+        
+        <!-- КНОПКА АДМИНА (Только для Баграта) -->
+        <button id="admin-btn" class="secondary-btn hidden" onclick="window.location.href='admin.html'" style="background: rgba(255, 71, 87, 0.15); border: 1px solid #ff4757; color: #ff6b81; margin-bottom: 20px;">
+            👑 Админ-панель
+        </button>
+
         <header>
             <h2 id="user-greeting">Привет!</h2>
             <p id="seat-info" class="subtitle" style="color: #fbc531;">Все в сборе! Твоё место выделено.</p>
@@ -60,7 +66,7 @@
         <button id="save-btn" class="primary-btn" onclick="saveChoice()">🎄 Сохранить выбор 🎄</button>
     </div>
 
-    <!-- 3. МЕНЮ -->
+    <!-- 3. МЕНЮ (МОДАЛЬНОЕ ОКНО) -->
     <div id="menu-modal" class="modal hidden">
         <div class="modal-overlay" onclick="closeMenu()"></div>
         <div class="modal-content glass-panel">
@@ -85,13 +91,15 @@
         </div>
     </div>
 
-    <!-- 4. ФОТО -->
+    <!-- 4. ПРОСМОТР ФОТО -->
     <div id="image-viewer" class="image-viewer hidden" onclick="closeImageViewer()">
         <button class="viewer-close-btn">✖</button>
         <img id="viewer-img" src="" alt="Full preview">
     </div>
 
+    <!-- СКРИПТЫ -->
     <script src="menu.js"></script>
-    <script src="script.js"></script>
+    <!-- ВАЖНО: type="module" нужен для работы Firebase -->
+    <script type="module" src="script.js"></script>
 </body>
 </html>

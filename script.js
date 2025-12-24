@@ -1,6 +1,10 @@
 // --- script.js ---
 
-// Генератор случайных чисел с seed (чтобы у всех было одинаково)
+// 1. ИМПОРТИРУЕМ БАЗУ И ФУНКЦИИ (Версия 12.7.0)
+import { db } from './firebase-init.js';
+import { doc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+// Генератор случайных чисел
 function mulberry32(a) {
     return function() {
       var t = a += 0x6D2B79F5;
@@ -10,7 +14,6 @@ function mulberry32(a) {
     }
 }
 
-// Вспомогательные функции
 function transliterate(word) {
     const converter = {
         'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh',
@@ -26,7 +29,7 @@ function getAvatarGenerator(name) {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff&size=128&bold=true&length=2&font-size=0.4`;
 }
 
-// БАЗА ДАННЫХ
+// БАЗА ПОЛЬЗОВАТЕЛЕЙ
 const usersDB = [
     { name: "Айрапетянц София", pass: "S0F1A2B3" },
     { name: "Бебия Баграт", pass: "B1A2G3R4" },
@@ -56,16 +59,13 @@ const usersDB = [
     { name: "Албаева Лариса Кадыровна", pass: "A9L8K7D6" }
 ];
 
-// Перемешиваем пользователей ОДИНАКОВО для всех (seed = 2025)
 const seed = 2025; 
 const rand = mulberry32(seed);
-// Алгоритм Фишера-Йетса с нашим seed
 for (let i = usersDB.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
     [usersDB[i], usersDB[j]] = [usersDB[j], usersDB[i]];
 }
 
-// Присваиваем места от 1 до 26
 usersDB.forEach((user, index) => {
     user.seatId = index + 1;
 });
@@ -73,7 +73,7 @@ usersDB.forEach((user, index) => {
 const totalSeats = 26; 
 let currentUserObj = null; 
 
-// Элементы
+// Элементы DOM
 const loginScreen = document.getElementById('login-screen');
 const mainApp = document.getElementById('main-app');
 const passwordInput = document.getElementById('password-input');
@@ -81,15 +81,19 @@ const greeting = document.getElementById('user-greeting');
 const chairsTop = document.getElementById('chairs-top');
 const chairsBottom = document.getElementById('chairs-bottom');
 const saveBtn = document.getElementById('save-btn');
+const adminBtn = document.getElementById('admin-btn'); // Кнопка админа
+
+// Экспортируем функции в глобальную область (для onclick в HTML)
+window.login = login;
+window.saveChoice = saveChoice;
 
 function initApp() {
     const half = Math.ceil(totalSeats / 2);
     for (let i = 1; i <= totalSeats; i++) {
         const chair = document.createElement('div');
         chair.classList.add('chair');
-        chair.textContent = i; // Пока цифра
+        chair.textContent = i; 
         chair.dataset.id = i;
-        // Клик отключен, так как места фиксированы
         
         if (i <= half) chairsTop.appendChild(chair);
         else chairsBottom.appendChild(chair);
@@ -106,17 +110,21 @@ function login() {
     if (user) {
         currentUserObj = user;
         
+        // --- ЛОГИКА АДМИНА ---
+        // Если это Баграт, показываем кнопку админки
+        if (user.name === "Бебия Баграт") {
+            if(adminBtn) adminBtn.classList.remove('hidden');
+        }
+        // ---------------------
+
         loginScreen.style.opacity = '0';
         setTimeout(() => {
             loginScreen.classList.add('hidden');
             mainApp.classList.remove('hidden');
             mainApp.classList.add('fade-in'); 
-            
-            // ЗАПОЛНЯЕМ СТОЛ (Анимация появления гостей)
             fillTableWithGuests();
         }, 500);
 
-        // Ставим аватарку в приветствие (нужно подождать загрузки функции фото)
         loadUserPhoto(user, (url) => {
              const firstName = user.name.split(' ')[1] || user.name.split(' ')[0];
              greeting.innerHTML = `Привет, ${firstName}! <img src="${url}" style="width:28px; height:28px; border-radius:50%; vertical-align: middle; margin-left:8px; border:1px solid #fff; object-fit:cover;">`;
@@ -128,71 +136,93 @@ function login() {
     }
 }
 
-// Функция, которая сажает ВСЕХ за стол
 function fillTableWithGuests() {
     usersDB.forEach(guest => {
         const chair = document.querySelector(`.chair[data-id="${guest.seatId}"]`);
         if (chair) {
-            // Загружаем фото гостя
             loadUserPhoto(guest, (url) => {
-                chair.textContent = ''; // Убираем цифру
+                chair.textContent = '';
                 chair.style.backgroundImage = `url('${url}')`;
-                
-                // Добавляем подсказку с именем (tooltip)
+                // ИСПРАВЛЕНИЕ: Прозрачный фон, чтобы убрать белые полоски
+                chair.style.backgroundColor = 'transparent';
                 chair.setAttribute('data-tooltip', guest.name);
             });
 
-            // Если это МЫ, то подсвечиваем
             if (guest.pass === currentUserObj.pass) {
                 chair.classList.add('selected');
                 setTimeout(() => {
                     chair.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
                 }, 800);
             } else {
-                // Остальные полупрозрачные или обычные
                 chair.classList.add('guest-seated');
             }
         }
     });
 }
 
-// Хелпер для загрузки фото (проверка существования)
 function loadUserPhoto(user, callback) {
     const defaultAvatar = getAvatarGenerator(user.name);
     const fileName = transliterate(user.name) + ".jpg";
     const filePath = `avatars/${fileName}`;
-
     const img = new Image();
     img.src = filePath;
     img.onload = () => callback(filePath);
     img.onerror = () => callback(defaultAvatar);
 }
 
-function saveChoice() {
+// --- СОХРАНЕНИЕ В FIREBASE ---
+async function saveChoice() {
+    // selectedFoods - глобальная переменная из menu.js
     if (typeof selectedFoods === 'undefined' || selectedFoods.length === 0) {
         alert("🍽 Ты ничего не заказал!");
         openMenu();
         return;
     }
 
-    const total = selectedFoods.reduce((sum, item) => sum + item.price, 0);
-    const orderSummary = {};
-    selectedFoods.forEach(item => orderSummary[item.title] = (orderSummary[item.title] || 0) + 1);
+    saveBtn.textContent = "Сохраняю... ⏳";
+    saveBtn.disabled = true; // Блокируем кнопку, чтобы не жали дважды
 
-    const orderListString = Object.entries(orderSummary)
-        .map(([name, count]) => `- ${name} (x${count})`)
-        .join('\n');
+    try {
+        const total = selectedFoods.reduce((sum, item) => sum + item.price, 0);
+        
+        // Подготовка данных: список блюд
+        const orderItems = selectedFoods.map(item => ({
+            title: item.title,
+            price: item.price
+        }));
 
-    saveBtn.textContent = "Готово! 🎉";
-    saveBtn.style.background = "#2ed573";
+        // Сохраняем в коллекцию 'orders'
+        // Используем имя пользователя как ID документа (перезаписываем, если уже был)
+        await setDoc(doc(db, "orders", currentUserObj.name), {
+            userName: currentUserObj.name,
+            items: orderItems,
+            totalPrice: total,
+            timestamp: new Date().toISOString()
+        });
 
-    setTimeout(() => {
-        alert(`🎅 Заказ для ${currentUserObj.name}:\n\n🍽:\n${orderListString}\n\n💰: ${total} ₽`);
-    }, 300);
+        saveBtn.textContent = "Готово! 🎉";
+        saveBtn.style.background = "#2ed573";
+        alert("Твой заказ успешно сохранен! ✅");
+        
+        // Возвращаем кнопку через пару секунд
+        setTimeout(() => {
+             saveBtn.disabled = false;
+             saveBtn.textContent = "🎄 Обновить выбор 🎄";
+             saveBtn.style.background = ""; // Сброс цвета (вернется градиент из CSS)
+        }, 3000);
+
+    } catch (error) {
+        console.error("Ошибка Firebase:", error);
+        saveBtn.textContent = "Ошибка";
+        saveBtn.style.background = "#ff4757";
+        alert("Ошибка при сохранении. Проверь интернет.");
+        saveBtn.disabled = false;
+    }
 }
 
 function createSnow() {
     const container = document.getElementById('snow-container');
+    if(!container) return;
     container.innerHTML = ''; 
     for (let i = 0; i < 50; i++) {
         const flake = document.createElement('div');
