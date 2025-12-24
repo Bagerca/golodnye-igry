@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎄 New Year Party 2025</title>
+    
+    <!-- Шрифты -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- СТИЛИ -->
+    <link rel="stylesheet" href="style.css"> <!-- Основной стиль -->
+    <link rel="stylesheet" href="menu.css">  <!-- НОВЫЙ файл для меню -->
+</head>
+<body>
+
+    <div id="snow-container"></div>
+
+    <!-- ЭКРАН ВХОДА -->
+    <div id="login-screen" class="glass-card fade-in">
+        <h1>🎅 Ho-Ho-Ho!</h1>
+        <p class="subtitle">Добро пожаловать на вечер</p>
+        <div class="input-group">
+            <select id="student-select">
+                <option value="" disabled selected>❄️ Найди свое имя...</option>
+            </select>
+        </div>
+        <button class="primary-btn" onclick="login()">Войти</button>
+    </div>
+
+    <!-- ГЛАВНЫЙ ЭКРАН -->
+    <div id="main-app" class="glass-card wide-card hidden">
+        <header>
+            <h2 id="user-greeting">Привет!</h2>
+            <p class="subtitle">Займи место за столом и выбери ужин</p>
+        </header>
+
+        <!-- СТОЛ -->
+        <section class="block">
+            <div class="table-scroll-wrapper">
+                <div class="banquet-table-container">
+                    <div class="chairs-row" id="chairs-top"></div>
+                    <div class="the-table"><div class="table-runner">2025</div></div>
+                    <div class="chairs-row" id="chairs-bottom"></div>
+                </div>
+            </div>
+            
+            <div class="legend">
+                <div class="l-item"><div class="legend-dot free"></div><span>Свободно</span></div>
+                <div class="l-item"><div class="legend-dot mine"></div><span>Твое</span></div>
+                <div class="l-item"><div class="legend-dot taken"></div><span>Занято</span></div>
+            </div>
+        </section>
+
+        <!-- КОРЗИНА -->
+        <section class="block" style="margin-top: 25px;">
+            <h3>🍽 Твой заказ</h3>
+            <div id="selected-food-display">
+                <!-- Сюда JS вставит корзину -->
+            </div>
+            <button class="secondary-btn" onclick="openMenu()">📖 Открыть Меню</button>
+        </section>
+
+        <button id="save-btn" class="primary-btn" onclick="saveChoice()">🎄 Подтвердить выбор 🎄</button>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО (Вынесено отдельно) -->
+    <div id="menu-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Меню</h2>
+                <button class="close-btn" onclick="closeMenu()">✖</button>
+            </div>
+            <div class="categories-wrapper">
+                <div class="categories-scroll" id="categories-container"></div>
+            </div>
+            <div class="menu-grid" id="menu-container">
+                <!-- Карточки генерируются тут -->
+            </div>
+        </div>
+    </div>
+
+    <!-- СКРИПТЫ -->
+    <script src="script.js"></script> <!-- Основная логика -->
+    <script src="menu.js"></script>   <!-- НОВЫЙ файл логики меню -->
+</body>
+</html>
