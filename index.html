@@ -11,33 +11,33 @@
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <!-- СТИЛИ -->
-    <link rel="stylesheet" href="style.css"> <!-- Основной стиль -->
-    <link rel="stylesheet" href="menu.css">  <!-- НОВЫЙ файл для меню -->
+    <link rel="stylesheet" href="style.css"> 
+    <link rel="stylesheet" href="menu.css">  
 </head>
 <body>
 
     <div id="snow-container"></div>
 
-    <!-- ЭКРАН ВХОДА -->
+    <!-- 1. ЭКРАН ВХОДА -->
     <div id="login-screen" class="glass-card fade-in">
         <h1>🎅 Ho-Ho-Ho!</h1>
-        <p class="subtitle">Добро пожаловать на вечер</p>
+        <p class="subtitle">Введи код, чтобы найти своё место</p>
+        
         <div class="input-group">
-            <select id="student-select">
-                <option value="" disabled selected>❄️ Найди свое имя...</option>
-            </select>
+            <input type="password" id="password-input" placeholder="Ваш код 🔑">
         </div>
+
         <button class="primary-btn" onclick="login()">Войти</button>
     </div>
 
-    <!-- ГЛАВНЫЙ ЭКРАН -->
+    <!-- 2. ГЛАВНЫЙ ИНТЕРФЕЙС -->
     <div id="main-app" class="glass-card wide-card hidden">
         <header>
             <h2 id="user-greeting">Привет!</h2>
-            <p class="subtitle">Займи место за столом и выбери ужин</p>
+            <p id="seat-info" class="subtitle" style="color: #fbc531;">Все в сборе! Твоё место выделено.</p>
         </header>
 
-        <!-- СТОЛ -->
+        <!-- Схема стола -->
         <section class="block">
             <div class="table-scroll-wrapper">
                 <div class="banquet-table-container">
@@ -46,44 +46,52 @@
                     <div class="chairs-row" id="chairs-bottom"></div>
                 </div>
             </div>
-            
-            <div class="legend">
-                <div class="l-item"><div class="legend-dot free"></div><span>Свободно</span></div>
-                <div class="l-item"><div class="legend-dot mine"></div><span>Твое</span></div>
-                <div class="l-item"><div class="legend-dot taken"></div><span>Занято</span></div>
-            </div>
         </section>
 
-        <!-- КОРЗИНА -->
+        <!-- Корзина -->
         <section class="block" style="margin-top: 25px;">
             <h3>🍽 Твой заказ</h3>
-            <div id="selected-food-display">
-                <!-- Сюда JS вставит корзину -->
-            </div>
-            <button class="secondary-btn" onclick="openMenu()">📖 Открыть Меню</button>
+            <div id="selected-food-display"></div>
+            <button class="secondary-btn" onclick="openMenu()">
+                <span>📖</span> Открыть меню
+            </button>
         </section>
 
-        <button id="save-btn" class="primary-btn" onclick="saveChoice()">🎄 Подтвердить выбор 🎄</button>
+        <button id="save-btn" class="primary-btn" onclick="saveChoice()">🎄 Сохранить выбор 🎄</button>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО (Вынесено отдельно) -->
+    <!-- 3. МЕНЮ -->
     <div id="menu-modal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-overlay" onclick="closeMenu()"></div>
+        <div class="modal-content glass-panel">
             <div class="modal-header">
-                <h2>Меню</h2>
-                <button class="close-btn" onclick="closeMenu()">✖</button>
+                <div class="header-left">
+                    <h2>Наше Меню</h2>
+                    <span class="modal-subtitle">Выбирай сердцем 💛</span>
+                </div>
+                <div class="header-right">
+                    <div class="mini-cart-info">Итого: <span id="modal-total-price">0</span> ₽</div>
+                    <button class="close-btn" onclick="closeMenu()">✖</button>
+                </div>
             </div>
             <div class="categories-wrapper">
+                <button id="scroll-left" class="scroll-arrow left hidden" onclick="scrollCategories(-1)">❮</button>
                 <div class="categories-scroll" id="categories-container"></div>
+                <button id="scroll-right" class="scroll-arrow right" onclick="scrollCategories(1)">❯</button>
             </div>
-            <div class="menu-grid" id="menu-container">
-                <!-- Карточки генерируются тут -->
+            <div class="menu-body">
+                <div class="menu-grid" id="menu-container"></div>
             </div>
         </div>
     </div>
 
-    <!-- СКРИПТЫ -->
-    <script src="script.js"></script> <!-- Основная логика -->
-    <script src="menu.js"></script>   <!-- НОВЫЙ файл логики меню -->
+    <!-- 4. ФОТО -->
+    <div id="image-viewer" class="image-viewer hidden" onclick="closeImageViewer()">
+        <button class="viewer-close-btn">✖</button>
+        <img id="viewer-img" src="" alt="Full preview">
+    </div>
+
+    <script src="menu.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
